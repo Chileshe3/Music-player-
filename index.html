@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Music Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(45deg, #4b6cb7, #182848);
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: white;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .playlist {
+            margin-bottom: 30px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .song-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .song-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .song-item.active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .player-controls {
+            text-align: center;
+        }
+
+        .control-button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            margin: 0 10px;
+            cursor: pointer;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .progress-container {
+            margin: 20px 0;
+            background: rgba(255, 255, 255, 0.1);
+            height: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .progress-bar {
+            background: white;
+            height: 100%;
+            border-radius: 5px;
+            width: 0;
+        }
+
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Local Music Player</h1>
+        </div>
+
+        <div class="upload-section" id="uploadSection">
+            <p>Click or drag files to upload music</p>
+            <input type="file" id="fileInput" accept="audio/*" multiple>
+        </div>
+
+        <div class="playlist" id="playlist">
+            <!-- Songs will be added here -->
+        </div>
+
+        <div class="player-controls">
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="time-display">
+                <span id="currentTime">0:00</span>
+                <span id="totalTime">0:00</span>
+            </div>
+            <button class="control-button" id="prevButton">⏮</button>
+            <button class="control-button" id="playButton">▶</button>
+            <button class="control-button" id="nextButton">⏭</button>
+        </div>
+    </div>
+
+    <script>
+        class MusicPlayer {
+            constructor() {
+                this.audio = new Audio();
+                this.playlist = [];
+                this.currentIndex = 0;
+                this.isPlaying = false;
+
+                this.initializeElements();
+                this.setupEventListeners();
+            }
+
+            initializeElements() {
+                this.fileInput = document.getElementById('fileInput');
+                this.uploadSection = document.getElementById('uploadSection');
+                this.playlistElement = document.getElementById('playlist');
+                this.playButton = document.getElementById('playButton');
+                this.prevButton = document.getElementById('prevButton');
+                this.nextButton = document.getElementById('nextButton');
+                this.progressContainer = document.getElementById('progressContainer');
+                this.progressBar = document.getElementById('progressBar');
+                this.currentTimeDisplay = document.getElementById('currentTime');
+                this.totalTimeDisplay = document.getElementById('totalTime');
+            }
+
+            setupEventListeners() {
+                // File upload handling
+                this.uploadSection.addEventListener('click', () => this.fileInput.click());
+                this.uploadSection.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    this.uploadSection.style.borderColor = 'white';
+                });
+                this.uploadSection.addEventListener('dragleave', () => {
+                    this.uploadSection.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                });
+                this.uploadSection.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.uploadSection.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    this.handleFiles(e.dataTransfer.files);
+                });
+                this.fileInput.addEventListener('change', () => this.handleFiles(this.fileInput.files));
+
+                // Player controls
+                this.playButton.addEventListener('click', () => this.togglePlay());
+                this.prevButton.addEventListener('click', () => this.playPrevious());
+                this.nextButton.addEventListener('click', () => this.playNext());
+                this.progressContainer.addEventListener('click', (e) => this.seekTo(e));
+
+                // Audio events
+                this.audio.addEventListener('timeupdate', () => this.updateProgress());
+                this.audio.addEventListener('ended', () => this.playNext());
+            }
+
+            handleFiles(files) {
+                Array.from(files).forEach(file => {
+                    if (file.type.startsWith('audio/')) {
+                        const song = {
+                            file: file,
+                            name: file.name,
+                            url: URL.createObjectURL(file)
+                        };
+                        this.playlist.push(song);
+                        this.addSongToPlaylist(song, this.playlist.length - 1);
+                    }
+                });
+
+                if (this.playlist.length === files.length) {
+                    this.loadSong(0);
+                }
+            }
+
+            addSongToPlaylist(song, index) {
+                const songElement = document.createElement('div');
+                songElement.className = 'song-item';
+                songElement.innerHTML = song.name;
+                songElement.addEventListener('click', () => this.loadSong(index));
+                this.playlistElement.appendChild(songElement);
+            }
+
+            loadSong(index) {
+                if (index >= 0 && index < this.playlist.length) {
+                    this.currentIndex = index;
+                    const song = this.playlist[this.currentIndex];
+                    this.audio.src = song.url;
+                    this.updatePlaylistUI();
+                    this.play();
+                }
+            }
+
+            updatePlaylistUI() {
+                const songs = this.playlistElement.getElementsByClassName('song-item');
+                Array.from(songs).forEach((song, index) => {
+                    song.classList.toggle('active', index === this.currentIndex);
+                });
+            }
+
+            togglePlay() {
+                if (this.playlist.length === 0) return;
+                
+                if (this.isPlaying) {
+                    this.pause();
+                } else {
+                    this.play();
+                }
+            }
+
+            play() {
+                this.audio.play();
+                this.isPlaying = true;
+                this.playButton.innerHTML = '⏸';
+            }
+
+            pause() {
+                this.audio.pause();
+                this.isPlaying = false;
+                this.playButton.innerHTML = '▶';
+            }
+
+            playPrevious() {
+                this.loadSong(this.currentIndex - 1);
+            }
+
+            playNext() {
+                this.loadSong(this.currentIndex + 1);
+            }
+
+            seekTo(e) {
+                const width = this.progressContainer.clientWidth;
+                const clickX = e.offsetX;
+                const duration = this.audio.duration;
+                this.audio.currentTime = (clickX / width) * duration;
+            }
+
+            updateProgress() {
+                const duration = this.audio.duration;
+                const currentTime = this.audio.currentTime;
+                
+                if (duration) {
+                    const progressPercent = (currentTime / duration) * 100;
+                    this.progressBar.style.width = `${progressPercent}%`;
+                    
+                    this.currentTimeDisplay.textContent = this.formatTime(currentTime);
+                    this.totalTimeDisplay.textContent = this.formatTime(duration);
+                }
+            }
+
+            formatTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = Math.floor(seconds % 60);
+                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+        }
+
+        // Initialize the music player
+        const player = new MusicPlayer();
+    </script>
+</body>
+</html>
